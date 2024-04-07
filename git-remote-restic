@@ -1,0 +1,64 @@
+#!/usr/bin/env python3
+import os
+from pathlib import Path
+import shutil
+import subprocess
+import sys
+from typing import Any
+
+import git
+import time
+
+import git_remote_restic.restic as restic
+from git_remote_restic.run_cmd import run_cmd
+
+# os.environ["XDG_CACHE_HOME"] or "~/.cache"
+
+os.environ["RESTIC_REPOSITORY"] = "/tmp/restic"
+os.environ["RESTIC_PASSWORD"] = "foo"
+
+
+LOCAL_REMOTE_PATH = os.getenv("GIT_DIR", "./foo.git/.git")
+# GIT_DIR = os.getenv("GIT_DIR", "./foo.git/.git")
+DECRYPTED_REMOTE_DIR = "/tmp/decrypted/"
+# DECRYPTED_REMOTE_DIR = "/tmp/decrypted"
+
+
+def notify(s: Any):
+    subprocess.run(["notify-send", str(s)])
+
+
+if __name__ == "__main__":
+    # Expected arguments: git-remote-restic <remote> [<url>]
+    url: str = sys.argv[2]
+
+    # restore restic
+    if os.path.isdir(DECRYPTED_REMOTE_DIR):
+        shutil.rmtree(DECRYPTED_REMOTE_DIR)
+    subprocess.run(["restic", "restore", "latest", "--target", DECRYPTED_REMOTE_DIR])
+
+    # set up git repos
+    for line in sys.stdin:
+        line = line.rstrip("\n")
+        notify(line)
+
+        match line.split(" "):
+            case ["capabilities"]:
+                sys.stdout.write("fetch\n\n")
+                sys.stdout.flush()
+            case ["list"]:
+                output = run_cmd(["git", "show-ref"], {"GIT_DIR": DECRYPTED_REMOTE_DIR})
+                sys.stdout.write(f"{output}\n")
+                sys.stdout.flush()
+            case ("fetch", _, _):
+                fetches = [line]
+                for inner_line in sys.stdin:
+                    match inner_line.split(" "):
+                        case ("fetch", _, _):
+                            fetches.append(inner_line)
+                        case _:
+                            break
+                shas = [x.split(" ")[1] for x in fetches]
+                notify(shas)
+            case _:
+                notify("fallback")

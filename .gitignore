@@ -1,1 +1,2 @@
-**/dist-newstyle/*
+**/__pycache__/
+.pytest_cache/

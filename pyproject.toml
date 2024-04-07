@@ -1,0 +1,18 @@
+[tool.poetry]
+package-mode = false
+
+[tool.poetry.dependencies]
+python = "^3.11"
+gitpython = "^3.1.43"
+pygit2 = "^1.14.1"
+
+[tool.poetry.group.test.dependencies]
+pytest = "^8.1.1"
+
+[tool.poetry.group.dev.dependencies]
+Nuitka-winsvc = "^2.1.4"
+debugpy = "^1.8.1"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
