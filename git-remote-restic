@@ -1,0 +1,64 @@
+#!/usr/bin/env bash
+
+# second argument passed to the script
+# @fixme: export to RESTIC_REPOSITORY
+RESTIC_URL=$2
+
+export RESTIC_REPOSITORY="/tmp/restic"
+export RESTIC_PASSWORD="foo"
+
+ROOT_DIR=$(pwd)
+# DECRYPTED_REMOTE_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/${RESTIC_URL}"
+# HASH=$(echo $RESTIC_URL | md5sum)
+# DECRYPTED_REMOTE_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/${HASH%% *}"
+DECRYPTED_REMOTE_DIR="/tmp/decrypted"
+LOCAL_GIT_DIR=$GIT_DIR
+
+while read line; do
+	case $line in
+	capabilities)
+		echo "fetch"
+		echo "push"
+		echo ""
+		;;
+	list | list\ for-push)
+		rm -rf $DECRYPTED_REMOTE_DIR
+		restic restore latest --target $DECRYPTED_REMOTE_DIR
+		GIT_DIR=$DECRYPTED_REMOTE_DIR git show-ref
+		echo ""
+		;;
+	fetch\ *)
+		while read inner_line; do
+			# if inner_line == ""...
+			[[ -z "${inner_line}" ]] && break
+		done
+		refspec=$(GIT_DIR=$LOCAL_GIT_DIR git config remote.origin.fetch)
+		GIT_DIR=$DECRYPTED_REMOTE_DIR git push $LOCAL_GIT_DIR $refspec
+		echo ""
+		;;
+	push\ *)
+		refspecs=("${line##push }")
+		while read inner_line; do
+			if [[ $inner_line == "push "* ]]; then
+				refspecs+=("${inner_line##push }")
+				continue
+			fi
+			break
+		done
+		for refspec in "${refspecs[@]}"; do
+			GIT_DIR=$LOCAL_GIT_DIR git push $DECRYPTED_REMOTE_DIR $refspec
+		done
+		cd $DECRYPTED_REMOTE_DIR &&
+			restic backup . >>/dev/null &&
+			cd $ROOT_DIR
+		for refspec in "${refspecs[@]}"; do
+			dst="${refspec##*:}"
+			echo "ok ${dst}"
+		done
+		echo ""
+		;;
+	*)
+		exit 0
+		;;
+	esac
+done
