@@ -1,18 +1,20 @@
 #!/usr/bin/env bash
-
 # second argument passed to the script
-# @fixme: export to RESTIC_REPOSITORY
-RESTIC_URL=$2
+# represents the URL for the restic repo
+export RESTIC_REPOSITORY=$2
 
-export RESTIC_REPOSITORY="/tmp/restic"
+# fixme: remove this
 export RESTIC_PASSWORD="foo"
 
-ROOT_DIR=$(pwd)
-# DECRYPTED_REMOTE_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/${RESTIC_URL}"
-# HASH=$(echo $RESTIC_URL | md5sum)
-# DECRYPTED_REMOTE_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/${HASH%% *}"
-DECRYPTED_REMOTE_DIR="/tmp/decrypted"
-LOCAL_GIT_DIR=$GIT_DIR
+readonly ROOT_DIR="$(pwd)"
+readonly LOCAL_GIT_DIR="${GIT_DIR}"
+readonly HASH="$(echo $RESTIC_REPOSITORY | md5sum)"
+readonly DECRYPTED_REMOTE_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/git-remote-restic/${HASH%% *}"
+
+# pull from remote restic
+# TODO: stop doing `rm -rf`, once this gets fixed: https://github.com/restic/restic/issues/4757
+rm -rf $DECRYPTED_REMOTE_DIR
+restic restore latest --target $DECRYPTED_REMOTE_DIR
 
 while read line; do
 	case $line in
@@ -22,17 +24,15 @@ while read line; do
 		echo ""
 		;;
 	list | list\ for-push)
-		rm -rf $DECRYPTED_REMOTE_DIR
-		restic restore latest --target $DECRYPTED_REMOTE_DIR
 		GIT_DIR=$DECRYPTED_REMOTE_DIR git show-ref
 		echo ""
 		;;
 	fetch\ *)
 		while read inner_line; do
-			# if inner_line == ""...
+			# if inner_line == ""
 			[[ -z "${inner_line}" ]] && break
 		done
-		refspec=$(GIT_DIR=$LOCAL_GIT_DIR git config remote.origin.fetch)
+		refspec="$(GIT_DIR=$LOCAL_GIT_DIR git config remote.origin.fetch)"
 		GIT_DIR=$DECRYPTED_REMOTE_DIR git push $LOCAL_GIT_DIR $refspec
 		echo ""
 		;;
