@@ -11,3 +11,15 @@ Other projects:
 - https://github.com/spwhitton/git-remote-gcrypt
 - https://github.com/GenerousLabs/git-remote-encrypted
 - https://github.com/nathants/git-remote-aws
+
+## Usage
+- Set up a restic repository, per the [instructions](https://restic.readthedocs.io/en/stable/030_preparing_a_new_repo.html)
+- Set the following env vars:
+    - `RESTIC_REPOSITORY`
+    - `RESTIC_PASSWORD` or `RESTIC_PASSWORD_FILE`
+
+```bash
+git remote add origin restic::$RESTIC_REPOSITORY
+```
+
+Use `git fetch` and `git push` as normal
