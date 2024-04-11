@@ -1,0 +1,55 @@
+#!/usr/bin/env bash
+
+# second argument passed to the script
+RCLONE_REMOTE=$2
+HASH=$(echo $RCLONE_REMOTE | md5sum)
+# DECRYPTED_REMOTE_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/${HASH%% *}"
+LOCAL_GIT_DIR=$GIT_DIR
+DECRYPTED_REMOTE_DIR="/tmp/decrypted"
+
+rclone sync $RCLONE_REMOTE $DECRYPTED_REMOTE_DIR
+
+while read line; do
+	case $line in
+	capabilities)
+		echo "fetch"
+		echo "push"
+		echo ""
+		;;
+	list | list\ for-push)
+		GIT_DIR=$DECRYPTED_REMOTE_DIR git show-ref
+		echo ""
+		;;
+	fetch\ *)
+		while read inner_line; do
+			# if inner_line == ""...
+			[[ -z "${inner_line}" ]] && break
+		done
+		refspec=$(GIT_DIR=$LOCAL_GIT_DIR git config remote.origin.fetch)
+		GIT_DIR=$DECRYPTED_REMOTE_DIR git push $LOCAL_GIT_DIR $refspec
+		echo ""
+		;;
+	push\ *)
+		refspecs=("${line##push }")
+		while read inner_line; do
+			if [[ $inner_line == "push "* ]]; then
+				refspecs+=("${inner_line##push }")
+				continue
+			fi
+			break
+		done
+		for refspec in "${refspecs[@]}"; do
+			GIT_DIR=$LOCAL_GIT_DIR git push $DECRYPTED_REMOTE_DIR $refspec
+		done
+		rclone sync $DECRYPTED_REMOTE_DIR $RCLONE_REMOTE
+		for refspec in "${refspecs[@]}"; do
+			dst="${refspec##*:}"
+			echo "ok ${dst}"
+		done
+		echo ""
+		;;
+	*)
+		exit 0
+		;;
+	esac
+done
