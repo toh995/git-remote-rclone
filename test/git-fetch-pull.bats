@@ -1,6 +1,7 @@
 # vi: filetype=sh
-readonly ROOT_DIR=$(pwd)
-declare RESTIC_SOURCE_DIR
+readonly ROOT_DIR="$(pwd)"
+declare RESTIC_SOURCE
+declare RESTIC_BARE
 declare LOCAL_DIR
 
 fetch_local() {
@@ -20,14 +21,18 @@ setup() {
 	PATH="$DIR/../:$PATH"
 
 	# set up stuff
-	RESTIC_SOURCE_DIR="${BATS_TEST_TMPDIR}/$(uuidgen)/.git"
+	RESTIC_SOURCE="${BATS_TEST_TMPDIR}/$(uuidgen)/.git"
+	RESTIC_BARE="${BATS_TEST_TMPDIR}/$(uuidgen)"
 	LOCAL_DIR="${BATS_TEST_TMPDIR}/$(uuidgen)/.git"
 
-	# set up $RESTIC_SOURCE_DIR with an initial commit
-	mkdir -p $RESTIC_SOURCE_DIR
-	GIT_DIR=$RESTIC_SOURCE_DIR git init
-	GIT_DIR=$RESTIC_SOURCE_DIR git commit --allow-empty -m "first commit"
-	cd $RESTIC_SOURCE_DIR && restic backup . && cd $ROOT_DIR
+	# set up $RESTIC_SOURCE with an initial commit
+	mkdir -p $RESTIC_BARE
+	GIT_DIR=$RESTIC_BARE git init --bare
+
+	git clone $RESTIC_BARE "$(dirname $RESTIC_SOURCE)"
+	GIT_DIR=$RESTIC_SOURCE git commit --allow-empty -m "first commit"
+	GIT_DIR=$RESTIC_SOURCE git push
+	cd $RESTIC_BARE && restic backup . && cd $ROOT_DIR
 
 	# clone repo to $LOCAL_DIR
 	mkdir -p $LOCAL_DIR
@@ -38,28 +43,29 @@ setup() {
 
 	# ensure the clone was successful
 	assert_equal $(GIT_DIR=$LOCAL_DIR git rev-parse HEAD) \
-		$(GIT_DIR=$RESTIC_SOURCE_DIR git rev-parse HEAD)
+		$(GIT_DIR=$RESTIC_SOURCE git rev-parse HEAD)
 }
 
 @test "local and remote on same commit" {
-	local -r commit_sha=$(GIT_DIR=$RESTIC_SOURCE_DIR git rev-parse HEAD)
+	local -r commit_sha=$(GIT_DIR=$RESTIC_SOURCE git rev-parse HEAD)
 	fetch_local
 	pull_local
 	assert_equal $(GIT_DIR=$LOCAL_DIR git rev-parse HEAD) \
 		$commit_sha
-	assert_equal $(GIT_DIR=$RESTIC_SOURCE_DIR git rev-parse HEAD) \
+	assert_equal $(GIT_DIR=$RESTIC_SOURCE git rev-parse HEAD) \
 		$commit_sha
 }
 
 @test "remote ahead of local by 1 commit" {
 	# add a commit to remote
-	GIT_DIR=$RESTIC_SOURCE_DIR git commit --allow-empty -m "commit"
-	cd $RESTIC_SOURCE_DIR && restic backup . && cd $ROOT_DIR
+	GIT_DIR=$RESTIC_SOURCE git commit --allow-empty -m "commit"
+	GIT_DIR=$RESTIC_SOURCE git push
+	cd $RESTIC_BARE && restic backup . && cd $ROOT_DIR
 	assert_not_equal $(GIT_DIR=$LOCAL_DIR git rev-parse HEAD) \
-		$(GIT_DIR=$RESTIC_SOURCE_DIR git rev-parse HEAD)
+		$(GIT_DIR=$RESTIC_SOURCE git rev-parse HEAD)
 
 	# fetch + pull
-	local -r remote_commit_sha=$(GIT_DIR=$RESTIC_SOURCE_DIR git rev-parse HEAD)
+	local -r remote_commit_sha=$(GIT_DIR=$RESTIC_SOURCE git rev-parse HEAD)
 	run fetch_local
 	assert_failure
 	pull_local
@@ -71,19 +77,20 @@ setup() {
 	local -r FILENAME="foo.txt"
 
 	# add a commit to remote, with a new file
-	cd "${RESTIC_SOURCE_DIR}/../"
+	cd "${RESTIC_SOURCE}/../"
 	uuidgen >$FILENAME
 	git add .
 	git commit -m "new file"
-	cd $RESTIC_SOURCE_DIR && restic backup . && cd $ROOT_DIR
+	git push
+	cd $RESTIC_BARE && restic backup . && cd $ROOT_DIR
 	assert_not_equal $(GIT_DIR=$LOCAL_DIR git rev-parse HEAD) \
-		$(GIT_DIR=$RESTIC_SOURCE_DIR git rev-parse HEAD)
+		$(GIT_DIR=$RESTIC_SOURCE git rev-parse HEAD)
 
 	# create a locally unstaged file
 	uuidgen >"${LOCAL_DIR}/../${FILENAME}"
 
 	# fetch + pull
-	local -r remote_commit_sha=$(GIT_DIR=$RESTIC_SOURCE_DIR git rev-parse HEAD)
+	local -r remote_commit_sha=$(GIT_DIR=$RESTIC_SOURCE git rev-parse HEAD)
 	run fetch_local
 	assert_failure
 	run pull_local
@@ -96,7 +103,7 @@ setup() {
 	# add a commit to local
 	GIT_DIR=$LOCAL_DIR git commit --allow-empty -m "commit"
 	assert_not_equal $(GIT_DIR=$LOCAL_DIR git rev-parse HEAD) \
-		$(GIT_DIR=$RESTIC_SOURCE_DIR git rev-parse HEAD)
+		$(GIT_DIR=$RESTIC_SOURCE git rev-parse HEAD)
 
 	# fetch + pull
 	local -r local_commit_sha=$(GIT_DIR=$LOCAL_DIR git rev-parse HEAD)
@@ -108,15 +115,16 @@ setup() {
 
 @test "local and remote divergent commits" {
 	# add a commit to remote
-	GIT_DIR=$RESTIC_SOURCE_DIR git commit --allow-empty -m "commit"
-	cd $RESTIC_SOURCE_DIR && restic backup . && cd $ROOT_DIR
+	GIT_DIR=$RESTIC_SOURCE git commit --allow-empty -m "commit"
+	GIT_DIR=$RESTIC_SOURCE git push
+	cd $RESTIC_BARE && restic backup . && cd $ROOT_DIR
 	assert_not_equal $(GIT_DIR=$LOCAL_DIR git rev-parse HEAD) \
-		$(GIT_DIR=$RESTIC_SOURCE_DIR git rev-parse HEAD)
+		$(GIT_DIR=$RESTIC_SOURCE git rev-parse HEAD)
 
 	# add a commit to local
 	GIT_DIR=$LOCAL_DIR git commit --allow-empty -m "ogres are like onions"
 	assert_not_equal $(GIT_DIR=$LOCAL_DIR git rev-parse HEAD) \
-		$(GIT_DIR=$RESTIC_SOURCE_DIR git rev-parse HEAD)
+		$(GIT_DIR=$RESTIC_SOURCE git rev-parse HEAD)
 
 	# fetch + pull
 	run fetch_local
@@ -124,5 +132,5 @@ setup() {
 	run pull_local
 	assert_failure
 	assert_not_equal $(GIT_DIR=$LOCAL_DIR git rev-parse HEAD) \
-		$(GIT_DIR=$RESTIC_SOURCE_DIR git rev-parse HEAD)
+		$(GIT_DIR=$RESTIC_SOURCE git rev-parse HEAD)
 }
