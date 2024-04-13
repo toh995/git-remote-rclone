@@ -134,3 +134,25 @@ setup() {
 	assert_not_equal $(GIT_DIR=$LOCAL_DIR git rev-parse HEAD) \
 		$(GIT_DIR=$RESTIC_SOURCE git rev-parse HEAD)
 }
+
+@test "fetching a new branch" {
+	# add a branch to the remote
+	local -r new_branch=$(uuidgen)
+	GIT_DIR=$RESTIC_SOURCE git checkout -b $new_branch
+	GIT_DIR=$RESTIC_SOURCE git push -u origin $new_branch
+	cd $RESTIC_BARE && restic backup . && cd $ROOT_DIR
+
+	# ensure the branch doesn't exist locally yet
+	check_branch() {
+		GIT_DIR=$LOCAL_DIR git rev-parse --verify $new_branch
+	}
+	run check_branch
+	assert_failure
+
+	# fetch
+	# ensure the branch exists locally now
+	GIT_DIR=$LOCAL_DIR git fetch
+	GIT_DIR=$LOCAL_DIR git checkout $new_branch
+	assert_equal $(GIT_DIR=$LOCAL_DIR git rev-parse --abbrev-ref HEAD) \
+		$new_branch
+}
