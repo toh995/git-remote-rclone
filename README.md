@@ -13,13 +13,55 @@ Other projects:
 - https://github.com/nathants/git-remote-aws
 
 ## Usage
-- Set up a restic repository, per the [instructions](https://restic.readthedocs.io/en/stable/030_preparing_a_new_repo.html)
-- Set the following env vars:
-    - `RESTIC_REPOSITORY`
-    - `RESTIC_PASSWORD` or `RESTIC_PASSWORD_FILE`
+### Configuration
+Set up password in:
+- `$XDG_CONFIG_HOME/git-remote-restic/restic-password`
 
+Optional - if using aws:
+- `$XDG_CONFIG_HOME/git-remote-restic/aws-access-key-id`
+- `$XDG_CONFIG_HOME/git-remote-restic/aws-secret-access-key`
+
+### Initial restic set up
 ```bash
-git remote add origin restic::$RESTIC_REPOSITORY
+# Set up a restic repo
+# NOTE: On first init, both the `host` and `username`
+# are stored in PLAINTEXT on the restic repo/server. 
+# To obfuscate, might want to change the host/username,
+# and/or run from a VM
+export AWS_ACCESS_KEY_ID=foo
+export AWS_SECRET_ACCESS_KEY=bar
+export RESTIC_RESPOSITORY=s3:s3.amazonaws.com/my.bucket.name/path/to/repository
+export RESTIC_PASSWORD=baz
+restic init
+
+# Create a git repo, to store inside the restic repo
+mkdir ./repo && cd ./repo
+git init
+git commit --allow-empty -m "first commit"
+git branch -m master main
+cd ..
+git clone --bare ./repo ./repo-bare
+cd ./repo-bare
+# don't need the git hooks
+rm ./hooks/* 
+# save the git repo to restic
+restic backup .
 ```
 
-Use `git fetch` and `git push` as normal
+### Cloning from restic to a new machine
+```bash
+RESTIC_RESPOSITORY=s3:s3.amazonaws.com/my.bucket.name/path/to/repository
+mkdir -p ./cloned && cd ./cloned
+git init
+git remote add origin "restic::${RESTIC_REPOSITORY}"
+git fetch
+git checkout main
+```
+
+## Testing
+To run the entire test suite:
+```bash
+bats ./test
+```
+
+Need to have the [bats](https://github.com/bats-core/bats-core) binary installed in `PATH`
