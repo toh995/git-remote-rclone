@@ -6,6 +6,7 @@ export RESTIC_REPOSITORY=$2
 readonly CACHE_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/git-remote-restic"
 readonly CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/git-remote-restic"
 
+# export env vars for restic
 export RESTIC_PASSWORD="$(cat "${CONFIG_DIR}/restic-password")"
 if [[ "${RESTIC_REPOSITORY}" == "s3:"* ]]; then
 	export AWS_ACCESS_KEY_ID="$(cat "${CONFIG_DIR}/aws-access-key-id")"

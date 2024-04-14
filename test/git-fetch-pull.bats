@@ -133,6 +133,56 @@ setup() {
 		$(GIT_DIR=$RESTIC_SOURCE git rev-parse HEAD)
 }
 
+@test "fetching remote with a deleted file AND new file" {
+	local -r FILENAME1="foo.txt"
+	local -r FILENAME2="bar.txt"
+
+	local -r FILENAME1_BODY="$(uuidgen)"
+	local -r FILENAME2_BODY="$(uuidgen)"
+	assert_not_equal "${FILENAME1_BODY}" "${FILENAME2_BODY}"
+
+	# add FILENAME1 to remote
+	echo "${FILENAME1_BODY}" >"$(dirname $RESTIC_SOURCE)/${FILENAME1}"
+	cd "$(dirname $RESTIC_SOURCE)"
+	GIT_DIR=$RESTIC_SOURCE git add "$(dirname $RESTIC_SOURCE)/${FILENAME1}"
+	GIT_DIR=$RESTIC_SOURCE git commit -m "new file"
+	GIT_DIR=$RESTIC_SOURCE git push
+	cd $RESTIC_BARE && restic backup . && cd $ROOT_DIR
+
+	# fetch + pull
+	# ensure that FILENAME1 exists locally
+	cd "${LOCAL_DIR}/../"
+	run fetch_local
+	assert_failure
+	pull_local
+	assert_equal "$(cat "${FILENAME1}")" \
+		"${FILENAME1_BODY}"
+	cd $ROOT_DIR
+
+	# add a commit to remote, with a FILENAME1 deleted, and FILENAME2 added
+	cd "$(dirname $RESTIC_SOURCE)"
+	rm "$(dirname $RESTIC_SOURCE)/${FILENAME1}"
+	echo "${FILENAME2_BODY}" >"$(dirname $RESTIC_SOURCE)/${FILENAME2}"
+	GIT_DIR=$RESTIC_SOURCE git add "$(dirname $RESTIC_SOURCE)/"
+	GIT_DIR=$RESTIC_SOURCE git commit -m "again again"
+	GIT_DIR=$RESTIC_SOURCE git push
+	cd $RESTIC_BARE && restic backup . && cd $ROOT_DIR
+	assert_not_equal $(GIT_DIR=$LOCAL_DIR git rev-parse HEAD) \
+		$(GIT_DIR=$RESTIC_SOURCE git rev-parse HEAD)
+
+	# fetch + pull
+	# ensure that FILENAME1 is deleted, and FILENAME2 is added
+	cd "${LOCAL_DIR}/../"
+	run fetch_local
+	assert_failure
+	pull_local
+	refute [[ -f "${FILENAME1}" ]]
+	assert_equal "$(cat "${FILENAME2}")" \
+		"${FILENAME2_BODY}"
+
+	cd $ROOT_DIR
+}
+
 @test "fetching a new branch" {
 	# add a branch to the remote
 	local -r new_branch=$(uuidgen)
