@@ -19,8 +19,16 @@ readonly HASH="$(echo $RESTIC_REPOSITORY | md5sum)"
 readonly DECRYPTED_REMOTE_DIR="${CACHE_DIR}/${HASH%% *}"
 
 # pull from remote restic
-# TODO: stop doing `rm -rf`, once this gets fixed: https://github.com/restic/restic/issues/4757
-rm -rf $DECRYPTED_REMOTE_DIR
+# need to remove all readonly objects locally first
+# TODO: stop this, once these github issue get fixed:
+# - https://github.com/restic/restic/issues/4757
+# - https://github.com/restic/restic/issues/4575
+readonly prev_opt="$(shopt -p | grep globstar)"
+shopt -s globstar
+for file in ${DECRYPTED_REMOTE_DIR}/**; do
+	[[ -f $file ]] && [[ ! -w $file ]] && rm -rf $file
+done
+eval "${prev_opt}"
 restic restore latest --target $DECRYPTED_REMOTE_DIR
 
 while read line; do
