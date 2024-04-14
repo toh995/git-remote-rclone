@@ -136,3 +136,50 @@ setup() {
 	run check_branch
 	assert_failure
 }
+
+@test "push sends a backup to kopia" {
+	# add a commit to local
+	GIT_DIR=$LOCAL_DIR git commit --allow-empty -m "commit"
+	assert_not_equal $(GIT_DIR=$LOCAL_DIR git rev-parse HEAD) \
+		$(GIT_DIR=$RCLONE_SOURCE git rev-parse HEAD)
+
+	local -r prev_snapshots="$(kopia snapshot list --json)"
+
+	# push
+	local -r local_commit_sha=$(GIT_DIR=$LOCAL_DIR git rev-parse HEAD)
+	push_local
+
+	# ensure that a new snapshot was saved
+	local -r curr_snapshots="$(kopia snapshot list --json)"
+	assert_equal "$(echo "${curr_snapshots}" | jq length)" \
+		"$((1 + "$(echo "${prev_snapshots}" | jq length)"))"
+
+	local -r curr_latest_id="$(echo "${curr_snapshots}" | jq --raw-output "sort_by(.endTime) | .[-1].id")"
+	local -r prev_latest_id="$(echo "${prev_snapshots}" | jq --raw-output "sort_by(.endTime) | .[-1].id")"
+	assert_not_equal "${curr_latest_id}" "${prev_latest_id}"
+
+	# inspect the snapshot contents
+	local -r kopia_restore_dir="${BATS_TEST_TMPDIR}/$(uuidgen)"
+	kopia restore "${curr_latest_id}" "${kopia_restore_dir}"
+	rclone sync $RCLONE_REMOTE $RCLONE_BARE
+
+	readonly prev_opt="$(shopt -p | grep globstar)"
+	shopt -s globstar
+	local -ra kopia_files=(${kopia_restore_dir}/**)
+	local -ra rclone_files=(${RCLONE_BARE}/**)
+	eval "${prev_opt}"
+
+	assert_equal "${#kopia_files[@]}" "${#rclone_files[@]}"
+
+	for i in "${!kopia_files[@]}"; do
+		local kopia_filename="${kopia_files[$i]}"
+		local rclone_filename="${rclone_files[$i]}"
+		assert_equal "${kopia_filename##${kopia_restore_dir}}" \
+			"${rclone_filename##${RCLONE_BARE}}"
+		if [[ -f "${kopia_filename}" ]]; then
+			local kopia_hash="$(md5sum "${kopia_filename}")"
+			local rclone_hash="$(md5sum "${rclone_filename}")"
+			assert_equal "${kopia_hash%% *}" "${rclone_hash%% *}"
+		fi
+	done
+}

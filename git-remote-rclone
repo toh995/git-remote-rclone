@@ -41,6 +41,7 @@ while read line; do
 			GIT_DIR=$LOCAL_GIT_DIR git push $DECRYPTED_REMOTE_DIR $refspec
 		done
 		rclone sync $DECRYPTED_REMOTE_DIR $RCLONE_REMOTE
+		kopia snapshot create $DECRYPTED_REMOTE_DIR
 		for refspec in "${refspecs[@]}"; do
 			dst="${refspec##*:}"
 			echo "ok ${dst}"

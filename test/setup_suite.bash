@@ -6,6 +6,11 @@ setup_suite() {
 	export XDG_CACHE_HOME="${BATS_SUITE_TMPDIR}/cache"
 	export XDG_CONFIG_HOME="${BATS_SUITE_TMPDIR}/config"
 
+	readonly RCLONE_REMOTE_DIR="${BATS_SUITE_TMPDIR}/$(uuidgen)"
+	readonly KOPIA_REMOTE_DIR="${BATS_SUITE_TMPDIR}/$(uuidgen)"
+	readonly PASSWORD="foo"
+	export KOPIA_PASSWORD="${PASSWORD}"
+
 	# Set up rclone
 	# Create a local encrypted remote
 	export RCLONE_REMOTE="foobarbaz:"
@@ -15,8 +20,12 @@ setup_suite() {
 		touch "${RCLONE_CFG}"
 	echo "[foobarbaz]" >>"${RCLONE_CFG}"
 	echo "type = crypt" >>"${RCLONE_CFG}"
-	echo "remote = ${BATS_SUITE_TMPDIR}/$(uuidgen)" >>"${RCLONE_CFG}"
-	echo "password = $(rclone obscure "foo")" >>"${RCLONE_CFG}"
+	echo "remote = ${RCLONE_REMOTE_DIR}" >>"${RCLONE_CFG}"
+	echo "password = $(rclone obscure "${PASSWORD}")" >>"${RCLONE_CFG}"
+
+	# Set up kopia
+	kopia repository create filesystem --path "${KOPIA_REMOTE_DIR}" --cache-directory "${XDG_CACHE_HOME}"
+	kopia repository connect filesystem --path "${KOPIA_REMOTE_DIR}"
 
 	# Set up git
 	readonly GITFILE="${XDG_CONFIG_HOME}/git/config"
