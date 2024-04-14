@@ -16,10 +16,6 @@ setup() {
 	load 'test_helper/bats-support/load'
 	load 'test_helper/bats-assert/load'
 
-	# Override $PATH to use the current repo's executable
-	DIR=$(dirname $BATS_TEST_FILENAME)
-	PATH="$DIR/../:$PATH"
-
 	# set up stuff
 	RESTIC_SOURCE="${BATS_TEST_TMPDIR}/$(uuidgen)/.git"
 	RESTIC_BARE="${BATS_TEST_TMPDIR}/$(uuidgen)"
@@ -37,7 +33,7 @@ setup() {
 	# clone repo to $LOCAL_DIR
 	mkdir -p $LOCAL_DIR
 	GIT_DIR=$LOCAL_DIR git init
-	GIT_DIR=$LOCAL_DIR git remote add origin "restic::/${RESTIC_REPOSITORY}"
+	GIT_DIR=$LOCAL_DIR git remote add origin "restic::${RESTIC_REPOSITORY}"
 	GIT_DIR=$LOCAL_DIR git fetch
 	GIT_DIR=$LOCAL_DIR git checkout master
 
@@ -77,26 +73,28 @@ setup() {
 	local -r FILENAME="foo.txt"
 
 	# add a commit to remote, with a new file
-	cd "${RESTIC_SOURCE}/../"
-	uuidgen >$FILENAME
-	git add .
-	git commit -m "new file"
-	git push
+	uuidgen >"$(dirname $RESTIC_SOURCE)/${FILENAME}"
+	cd "$(dirname $RESTIC_SOURCE)"
+	GIT_DIR=$RESTIC_SOURCE git add "$(dirname $RESTIC_SOURCE)/${FILENAME}"
+	GIT_DIR=$RESTIC_SOURCE git commit -m "new file"
+	GIT_DIR=$RESTIC_SOURCE git push
 	cd $RESTIC_BARE && restic backup . && cd $ROOT_DIR
 	assert_not_equal $(GIT_DIR=$LOCAL_DIR git rev-parse HEAD) \
 		$(GIT_DIR=$RESTIC_SOURCE git rev-parse HEAD)
 
 	# create a locally unstaged file
-	uuidgen >"${LOCAL_DIR}/../${FILENAME}"
+	uuidgen >"$(dirname $LOCAL_DIR)/${FILENAME}"
 
 	# fetch + pull
 	local -r remote_commit_sha=$(GIT_DIR=$RESTIC_SOURCE git rev-parse HEAD)
+	cd "${LOCAL_DIR}/../"
 	run fetch_local
 	assert_failure
 	run pull_local
 	assert_failure
 	assert_not_equal $(GIT_DIR=$LOCAL_DIR git rev-parse HEAD) \
 		$remote_commit_sha
+	cd $ROOT_DIR
 }
 
 @test "local ahead of remote by 1 commit" {

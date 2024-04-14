@@ -3,13 +3,19 @@
 # represents the URL for the restic repo
 export RESTIC_REPOSITORY=$2
 
-# fixme: remove this
-export RESTIC_PASSWORD="foo"
+readonly CACHE_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/git-remote-restic"
+readonly CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/git-remote-restic"
+
+export RESTIC_PASSWORD="$(cat "${CONFIG_DIR}/restic-password")"
+if [[ "${RESTIC_REPOSITORY}" == "s3:"* ]]; then
+	export AWS_ACCESS_KEY_ID="$(cat "${CONFIG_DIR}/aws-access-key-id")"
+	export AWS_SECRET_ACCESS_KEY="$(cat "${CONFIG_DIR}/aws-secret-access-key")"
+fi
 
 readonly ROOT_DIR="$(pwd)"
 readonly LOCAL_GIT_DIR="${GIT_DIR}"
 readonly HASH="$(echo $RESTIC_REPOSITORY | md5sum)"
-readonly DECRYPTED_REMOTE_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/git-remote-restic/${HASH%% *}"
+readonly DECRYPTED_REMOTE_DIR="${CACHE_DIR}/${HASH%% *}"
 
 # pull from remote restic
 # TODO: stop doing `rm -rf`, once this gets fixed: https://github.com/restic/restic/issues/4757

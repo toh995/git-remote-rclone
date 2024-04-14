@@ -12,10 +12,6 @@ setup() {
 	load 'test_helper/bats-support/load'
 	load 'test_helper/bats-assert/load'
 
-	# Override $PATH to use the current repo's executable
-	DIR=$(dirname $BATS_TEST_FILENAME)
-	PATH="$DIR/../:$PATH"
-
 	# set up stuff
 	RESTIC_SOURCE="${BATS_TEST_TMPDIR}/$(uuidgen)/.git"
 	RESTIC_BARE="${BATS_TEST_TMPDIR}/$(uuidgen)"
@@ -33,7 +29,7 @@ setup() {
 	# clone repo to $LOCAL_DIR
 	mkdir -p $LOCAL_DIR
 	GIT_DIR=$LOCAL_DIR git init
-	GIT_DIR=$LOCAL_DIR git remote add origin "restic::/${RESTIC_REPOSITORY}"
+	GIT_DIR=$LOCAL_DIR git remote add origin "restic::${RESTIC_REPOSITORY}"
 	GIT_DIR=$LOCAL_DIR git fetch
 	GIT_DIR=$LOCAL_DIR git checkout master
 
@@ -123,7 +119,7 @@ setup() {
 
 @test "pushing a branch deletion from local to remote" {
 	# add a branch to the remote
-	local -r del_branch=$(uuidgen)
+	local -r del_branch="$(uuidgen)"
 	GIT_DIR=$RESTIC_SOURCE git checkout -b $del_branch
 	GIT_DIR=$RESTIC_SOURCE git push -u origin $del_branch
 	cd $RESTIC_BARE && restic backup . && cd $ROOT_DIR
