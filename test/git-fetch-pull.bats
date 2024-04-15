@@ -1,7 +1,7 @@
 # vi: filetype=sh
 readonly ROOT_DIR="$(pwd)"
-declare RESTIC_SOURCE
-declare RESTIC_BARE
+declare RCLONE_BARE
+declare RCLONE_SOURCE
 declare LOCAL_DIR
 
 fetch_local() {
@@ -17,51 +17,51 @@ setup() {
 	load 'test_helper/bats-assert/load'
 
 	# set up stuff
-	RESTIC_SOURCE="${BATS_TEST_TMPDIR}/$(uuidgen)/.git"
-	RESTIC_BARE="${BATS_TEST_TMPDIR}/$(uuidgen)"
+	RCLONE_BARE="${BATS_TEST_TMPDIR}/$(uuidgen)"
+	RCLONE_SOURCE="${BATS_TEST_TMPDIR}/$(uuidgen)/.git"
 	LOCAL_DIR="${BATS_TEST_TMPDIR}/$(uuidgen)/.git"
 
-	# set up $RESTIC_SOURCE with an initial commit
-	mkdir -p $RESTIC_BARE
-	GIT_DIR=$RESTIC_BARE git init --bare
+	# set up rclone with an initial commit
+	mkdir -p $RCLONE_BARE
+	GIT_DIR=$RCLONE_BARE git init --bare
 
-	git clone $RESTIC_BARE "$(dirname $RESTIC_SOURCE)"
-	GIT_DIR=$RESTIC_SOURCE git commit --allow-empty -m "first commit"
-	GIT_DIR=$RESTIC_SOURCE git push
-	cd $RESTIC_BARE && restic backup . && cd $ROOT_DIR
+	git clone $RCLONE_BARE "$(dirname $RCLONE_SOURCE)"
+	GIT_DIR=$RCLONE_SOURCE git commit --allow-empty -m "first commit"
+	GIT_DIR=$RCLONE_SOURCE git push
+	rclone sync $RCLONE_BARE $RCLONE_REMOTE
 
 	# clone repo to $LOCAL_DIR
 	mkdir -p $LOCAL_DIR
 	GIT_DIR=$LOCAL_DIR git init
-	GIT_DIR=$LOCAL_DIR git remote add origin "restic::${RESTIC_REPOSITORY}"
+	GIT_DIR=$LOCAL_DIR git remote add origin "rclone::${RCLONE_REMOTE}"
 	GIT_DIR=$LOCAL_DIR git fetch
 	GIT_DIR=$LOCAL_DIR git checkout master
 
 	# ensure the clone was successful
 	assert_equal $(GIT_DIR=$LOCAL_DIR git rev-parse HEAD) \
-		$(GIT_DIR=$RESTIC_SOURCE git rev-parse HEAD)
+		$(GIT_DIR=$RCLONE_SOURCE git rev-parse HEAD)
 }
 
 @test "local and remote on same commit" {
-	local -r commit_sha=$(GIT_DIR=$RESTIC_SOURCE git rev-parse HEAD)
+	local -r commit_sha=$(GIT_DIR=$RCLONE_SOURCE git rev-parse HEAD)
 	fetch_local
 	pull_local
 	assert_equal $(GIT_DIR=$LOCAL_DIR git rev-parse HEAD) \
 		$commit_sha
-	assert_equal $(GIT_DIR=$RESTIC_SOURCE git rev-parse HEAD) \
+	assert_equal $(GIT_DIR=$RCLONE_SOURCE git rev-parse HEAD) \
 		$commit_sha
 }
 
 @test "remote ahead of local by 1 commit" {
 	# add a commit to remote
-	GIT_DIR=$RESTIC_SOURCE git commit --allow-empty -m "commit"
-	GIT_DIR=$RESTIC_SOURCE git push
-	cd $RESTIC_BARE && restic backup . && cd $ROOT_DIR
+	GIT_DIR=$RCLONE_SOURCE git commit --allow-empty -m "commit"
+	GIT_DIR=$RCLONE_SOURCE git push
+	rclone sync $RCLONE_BARE $RCLONE_REMOTE
 	assert_not_equal $(GIT_DIR=$LOCAL_DIR git rev-parse HEAD) \
-		$(GIT_DIR=$RESTIC_SOURCE git rev-parse HEAD)
+		$(GIT_DIR=$RCLONE_SOURCE git rev-parse HEAD)
 
 	# fetch + pull
-	local -r remote_commit_sha=$(GIT_DIR=$RESTIC_SOURCE git rev-parse HEAD)
+	local -r remote_commit_sha=$(GIT_DIR=$RCLONE_SOURCE git rev-parse HEAD)
 	run fetch_local
 	assert_failure
 	pull_local
@@ -73,20 +73,20 @@ setup() {
 	local -r FILENAME="foo.txt"
 
 	# add a commit to remote, with a new file
-	uuidgen >"$(dirname $RESTIC_SOURCE)/${FILENAME}"
-	cd "$(dirname $RESTIC_SOURCE)"
-	GIT_DIR=$RESTIC_SOURCE git add "$(dirname $RESTIC_SOURCE)/${FILENAME}"
-	GIT_DIR=$RESTIC_SOURCE git commit -m "new file"
-	GIT_DIR=$RESTIC_SOURCE git push
-	cd $RESTIC_BARE && restic backup . && cd $ROOT_DIR
+	uuidgen >"$(dirname $RCLONE_SOURCE)/${FILENAME}"
+	cd "$(dirname $RCLONE_SOURCE)"
+	GIT_DIR=$RCLONE_SOURCE git add "$(dirname $RCLONE_SOURCE)/${FILENAME}"
+	GIT_DIR=$RCLONE_SOURCE git commit -m "new file"
+	GIT_DIR=$RCLONE_SOURCE git push
+	rclone sync $RCLONE_BARE $RCLONE_REMOTE
 	assert_not_equal $(GIT_DIR=$LOCAL_DIR git rev-parse HEAD) \
-		$(GIT_DIR=$RESTIC_SOURCE git rev-parse HEAD)
+		$(GIT_DIR=$RCLONE_SOURCE git rev-parse HEAD)
 
 	# create a locally unstaged file
 	uuidgen >"$(dirname $LOCAL_DIR)/${FILENAME}"
 
 	# fetch + pull
-	local -r remote_commit_sha=$(GIT_DIR=$RESTIC_SOURCE git rev-parse HEAD)
+	local -r remote_commit_sha=$(GIT_DIR=$RCLONE_SOURCE git rev-parse HEAD)
 	cd "${LOCAL_DIR}/../"
 	run fetch_local
 	assert_failure
@@ -101,7 +101,7 @@ setup() {
 	# add a commit to local
 	GIT_DIR=$LOCAL_DIR git commit --allow-empty -m "commit"
 	assert_not_equal $(GIT_DIR=$LOCAL_DIR git rev-parse HEAD) \
-		$(GIT_DIR=$RESTIC_SOURCE git rev-parse HEAD)
+		$(GIT_DIR=$RCLONE_SOURCE git rev-parse HEAD)
 
 	# fetch + pull
 	local -r local_commit_sha=$(GIT_DIR=$LOCAL_DIR git rev-parse HEAD)
@@ -113,16 +113,16 @@ setup() {
 
 @test "local and remote divergent commits" {
 	# add a commit to remote
-	GIT_DIR=$RESTIC_SOURCE git commit --allow-empty -m "commit"
-	GIT_DIR=$RESTIC_SOURCE git push
-	cd $RESTIC_BARE && restic backup . && cd $ROOT_DIR
+	GIT_DIR=$RCLONE_SOURCE git commit --allow-empty -m "commit"
+	GIT_DIR=$RCLONE_SOURCE git push
+	rclone sync $RCLONE_BARE $RCLONE_REMOTE
 	assert_not_equal $(GIT_DIR=$LOCAL_DIR git rev-parse HEAD) \
-		$(GIT_DIR=$RESTIC_SOURCE git rev-parse HEAD)
+		$(GIT_DIR=$RCLONE_SOURCE git rev-parse HEAD)
 
 	# add a commit to local
 	GIT_DIR=$LOCAL_DIR git commit --allow-empty -m "ogres are like onions"
 	assert_not_equal $(GIT_DIR=$LOCAL_DIR git rev-parse HEAD) \
-		$(GIT_DIR=$RESTIC_SOURCE git rev-parse HEAD)
+		$(GIT_DIR=$RCLONE_SOURCE git rev-parse HEAD)
 
 	# fetch + pull
 	run fetch_local
@@ -130,7 +130,7 @@ setup() {
 	run pull_local
 	assert_failure
 	assert_not_equal $(GIT_DIR=$LOCAL_DIR git rev-parse HEAD) \
-		$(GIT_DIR=$RESTIC_SOURCE git rev-parse HEAD)
+		$(GIT_DIR=$RCLONE_SOURCE git rev-parse HEAD)
 }
 
 @test "fetching remote with a deleted file AND new file" {
@@ -142,12 +142,12 @@ setup() {
 	assert_not_equal "${FILENAME1_BODY}" "${FILENAME2_BODY}"
 
 	# add FILENAME1 to remote
-	echo "${FILENAME1_BODY}" >"$(dirname $RESTIC_SOURCE)/${FILENAME1}"
-	cd "$(dirname $RESTIC_SOURCE)"
-	GIT_DIR=$RESTIC_SOURCE git add "$(dirname $RESTIC_SOURCE)/${FILENAME1}"
-	GIT_DIR=$RESTIC_SOURCE git commit -m "new file"
-	GIT_DIR=$RESTIC_SOURCE git push
-	cd $RESTIC_BARE && restic backup . && cd $ROOT_DIR
+	echo "${FILENAME1_BODY}" >"$(dirname $RCLONE_SOURCE)/${FILENAME1}"
+	cd "$(dirname $RCLONE_SOURCE)"
+	GIT_DIR=$RCLONE_SOURCE git add "$(dirname $RCLONE_SOURCE)/${FILENAME1}"
+	GIT_DIR=$RCLONE_SOURCE git commit -m "new file"
+	GIT_DIR=$RCLONE_SOURCE git push
+	rclone sync $RCLONE_BARE $RCLONE_REMOTE
 
 	# fetch + pull
 	# ensure that FILENAME1 exists locally
@@ -160,15 +160,16 @@ setup() {
 	cd $ROOT_DIR
 
 	# add a commit to remote, with a FILENAME1 deleted, and FILENAME2 added
-	cd "$(dirname $RESTIC_SOURCE)"
-	rm "$(dirname $RESTIC_SOURCE)/${FILENAME1}"
-	echo "${FILENAME2_BODY}" >"$(dirname $RESTIC_SOURCE)/${FILENAME2}"
-	GIT_DIR=$RESTIC_SOURCE git add "$(dirname $RESTIC_SOURCE)/"
-	GIT_DIR=$RESTIC_SOURCE git commit -m "again again"
-	GIT_DIR=$RESTIC_SOURCE git push
-	cd $RESTIC_BARE && restic backup . && cd $ROOT_DIR
+	cd "$(dirname $RCLONE_SOURCE)"
+	rm "$(dirname $RCLONE_SOURCE)/${FILENAME1}"
+	echo "${FILENAME2_BODY}" >"$(dirname $RCLONE_SOURCE)/${FILENAME2}"
+	GIT_DIR=$RCLONE_SOURCE git add "$(dirname $RCLONE_SOURCE)/"
+	GIT_DIR=$RCLONE_SOURCE git commit -m "again again"
+	GIT_DIR=$RCLONE_SOURCE git push
+	rclone sync $RCLONE_BARE $RCLONE_REMOTE
+
 	assert_not_equal $(GIT_DIR=$LOCAL_DIR git rev-parse HEAD) \
-		$(GIT_DIR=$RESTIC_SOURCE git rev-parse HEAD)
+		$(GIT_DIR=$RCLONE_SOURCE git rev-parse HEAD)
 
 	# fetch + pull
 	# ensure that FILENAME1 is deleted, and FILENAME2 is added
@@ -186,9 +187,9 @@ setup() {
 @test "fetching a new branch" {
 	# add a branch to the remote
 	local -r new_branch=$(uuidgen)
-	GIT_DIR=$RESTIC_SOURCE git checkout -b $new_branch
-	GIT_DIR=$RESTIC_SOURCE git push -u origin $new_branch
-	cd $RESTIC_BARE && restic backup . && cd $ROOT_DIR
+	GIT_DIR=$RCLONE_SOURCE git checkout -b $new_branch
+	GIT_DIR=$RCLONE_SOURCE git push -u origin $new_branch
+	rclone sync $RCLONE_BARE $RCLONE_REMOTE
 
 	# ensure the branch doesn't exist locally yet
 	check_branch() {

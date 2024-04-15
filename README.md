@@ -12,56 +12,59 @@ Other projects:
 - https://github.com/GenerousLabs/git-remote-encrypted
 - https://github.com/nathants/git-remote-aws
 
-## Usage
-### Configuration
-Set up password in:
-- `$XDG_CONFIG_HOME/git-remote-restic/restic-password`
+## Installation
+TODO
 
-Optional - if using aws:
-- `$XDG_CONFIG_HOME/git-remote-restic/aws-access-key-id`
-- `$XDG_CONFIG_HOME/git-remote-restic/aws-secret-access-key`
+## Setup
+### Configure rclone on your machine
+- Use the [rclone docs](https://rclone.org/crypt/) 
+- Set up an _encrypted_ remote
 
-### Initial restic set up
+### FIRST TIME ONLY: Create a bare git repo locally, then sync to rclone
 ```bash
-# Set up a restic repo
-# NOTE: On first init, both the `host` and `username`
-# are stored in PLAINTEXT on the restic repo/server. 
-# To obfuscate, might want to change the host/username,
-# and/or run from a VM
-export AWS_ACCESS_KEY_ID=foo
-export AWS_SECRET_ACCESS_KEY=bar
-export RESTIC_RESPOSITORY=s3:s3.amazonaws.com/my.bucket.name/path/to/repository
-export RESTIC_PASSWORD=baz
-restic init
+BARE_DIR=/tmp/repo-bare
+REPO_DIR=/tmp/repo
+mkdir -p $BARE_DIR && cd $BARE_DIR
+git init --bare
+rm ./hooks/* # hooks not needed
 
-# Create a git repo, to store inside the restic repo
-mkdir ./repo && cd ./repo
-git init
+git clone $BARE_DIR $REPO_DIR
+cd $REPO_DIR
 git commit --allow-empty -m "first commit"
 git branch -m master main
-cd ..
-git clone --bare ./repo ./repo-bare
-cd ./repo-bare
-# don't need the git hooks
-rm ./hooks/* 
-# save the git repo to restic
-restic backup .
+git push -u origin main
+
+cd $BARE_DIR
+git symbolic-ref HEAD refs/heads/main # change HEAD to the main branch
+rclone sync $BARE_DIR rclone-remote:path/to/use
 ```
 
-### Cloning from restic to a new machine
+### Clone the repo to a new machine
+NOTE: `git clone` does NOT work! Use this instead:
 ```bash
-RESTIC_RESPOSITORY=s3:s3.amazonaws.com/my.bucket.name/path/to/repository
-mkdir -p ./cloned && cd ./cloned
+mkdir ./cloned && cd ./cloned
 git init
-git remote add origin "restic::${RESTIC_REPOSITORY}"
+git remote add origin "rclone::rclone-remote:path/to/use"
 git fetch
 git checkout main
 ```
 
-## Testing
-To run the entire test suite:
+### Set up kopia for backups
+- If setting up for the first time, use [kopia repository create](https://kopia.io/docs/getting-started/#creating-a-repository)
+- Otherwise, use [kopia repository connect](https://kopia.io/docs/getting-started/#connecting-to-repository)
+
+## Usage
+Use `git fetch` and `git push` as normal.
+
+**KNOWN LIMITATIONS:**
+- `git fetch` sometimes shows an error, even though the fetch was successful
+- The first `git pull` won't work
+    - Instead, you can do `git fetch` and then `git pull` (or `git pull` twice)
+
+## Tests
+We use the [bats](https://github.com/bats-core/bats-core) test framework.
+
+First, install the `bats` binary to `PATH`. Then do:
 ```bash
 bats ./test
 ```
-
-Need to have the [bats](https://github.com/bats-core/bats-core) binary installed in `PATH`

@@ -3,18 +3,29 @@ setup_suite() {
 	DIR=$(dirname $BATS_TEST_FILENAME)
 	PATH="$DIR/../:$PATH"
 
-	# Set up restic
-	export RESTIC_REPOSITORY="${BATS_SUITE_TMPDIR}/$(uuidgen)"
-	export RESTIC_PASSWORD="foo"
-	restic init
-
 	export XDG_CACHE_HOME="${BATS_SUITE_TMPDIR}/cache"
 	export XDG_CONFIG_HOME="${BATS_SUITE_TMPDIR}/config"
 
-	# Set up restic password
-	readonly PASS_FILE="${XDG_CONFIG_HOME}/git-remote-restic/restic-password"
-	mkdir -p "$(dirname $PASS_FILE)" &&
-		echo $RESTIC_PASSWORD >"${PASS_FILE}"
+	readonly RCLONE_REMOTE_DIR="${BATS_SUITE_TMPDIR}/$(uuidgen)"
+	readonly KOPIA_REMOTE_DIR="${BATS_SUITE_TMPDIR}/$(uuidgen)"
+	readonly PASSWORD="foo"
+	export KOPIA_PASSWORD="${PASSWORD}"
+
+	# Set up rclone
+	# Create a local encrypted remote
+	export RCLONE_REMOTE="foobarbaz:"
+
+	readonly RCLONE_CFG="${XDG_CONFIG_HOME}/rclone/rclone.conf"
+	mkdir -p "$(dirname "${RCLONE_CFG}")" &&
+		touch "${RCLONE_CFG}"
+	echo "[foobarbaz]" >>"${RCLONE_CFG}"
+	echo "type = crypt" >>"${RCLONE_CFG}"
+	echo "remote = ${RCLONE_REMOTE_DIR}" >>"${RCLONE_CFG}"
+	echo "password = $(rclone obscure "${PASSWORD}")" >>"${RCLONE_CFG}"
+
+	# Set up kopia
+	kopia repository create filesystem --path "${KOPIA_REMOTE_DIR}" --cache-directory "${XDG_CACHE_HOME}"
+	kopia repository connect filesystem --path "${KOPIA_REMOTE_DIR}"
 
 	# Set up git
 	readonly GITFILE="${XDG_CONFIG_HOME}/git/config"
