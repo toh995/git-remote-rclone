@@ -1,14 +1,15 @@
 #!/usr/bin/env bash
-# second argument passed to the script
+# Second argument passed to the script
+# See https://git-scm.com/docs/gitremote-helpers#_invocation
 readonly RCLONE_REMOTE=$2
-readonly HASH="$(echo "${RCLONE_REMOTE}" | md5sum)"
+HASH="$(echo "${RCLONE_REMOTE}" | md5sum)" && readonly HASH
 readonly DECRYPTED_REMOTE_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/git-remote-rclone/${HASH%% *}"
 readonly LOCAL_GIT_DIR="${GIT_DIR}"
 
 # pull from remote rclone
 rclone sync "${RCLONE_REMOTE}" "${DECRYPTED_REMOTE_DIR}"
 
-while read line; do
+while read -r line; do
 	case $line in
 	capabilities)
 		echo "fetch"
@@ -20,17 +21,17 @@ while read line; do
 		echo ""
 		;;
 	fetch\ *)
-		while read inner_line; do
+		while read -r inner_line; do
 			# if inner_line == ""
 			[[ -z "${inner_line}" ]] && break
 		done
 		refspec="$(GIT_DIR=$LOCAL_GIT_DIR git config remote.origin.fetch)"
-		GIT_DIR=$DECRYPTED_REMOTE_DIR git push $LOCAL_GIT_DIR $refspec
+		GIT_DIR=$DECRYPTED_REMOTE_DIR git push "${LOCAL_GIT_DIR}" "${refspec}"
 		echo ""
 		;;
 	push\ *)
 		refspecs=("${line##push }")
-		while read inner_line; do
+		while read -r inner_line; do
 			if [[ $inner_line == "push "* ]]; then
 				refspecs+=("${inner_line##push }")
 				continue
@@ -38,10 +39,10 @@ while read line; do
 			break
 		done
 		for refspec in "${refspecs[@]}"; do
-			GIT_DIR=$LOCAL_GIT_DIR git push $DECRYPTED_REMOTE_DIR $refspec
+			GIT_DIR=$LOCAL_GIT_DIR git push "${DECRYPTED_REMOTE_DIR}" "${refspec}"
 		done
-		rclone sync $DECRYPTED_REMOTE_DIR $RCLONE_REMOTE
-		kopia snapshot create $DECRYPTED_REMOTE_DIR
+		rclone sync "${DECRYPTED_REMOTE_DIR}" "${RCLONE_REMOTE}"
+		kopia snapshot create "${DECRYPTED_REMOTE_DIR}"
 		for refspec in "${refspecs[@]}"; do
 			dst="${refspec##*:}"
 			echo "ok ${dst}"
