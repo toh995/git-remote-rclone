@@ -2,7 +2,15 @@
 # Second argument passed to the script
 # See https://git-scm.com/docs/gitremote-helpers#_invocation
 readonly RCLONE_REMOTE=$2
-HASH="$(echo "${RCLONE_REMOTE}" | md5sum)" && readonly HASH
+
+# Compute the md5 hash for $RCLONE_REMOTE
+HASH_CMD="md5sum"
+if ! command -v md5sum &>/dev/null; then
+	HASH_CMD="md5"
+fi
+readonly HASH_CMD
+HASH="$(echo "${RCLONE_REMOTE}" | eval "${HASH_CMD}")" && readonly HASH
+
 readonly DECRYPTED_REMOTE_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/git-remote-rclone/${HASH%% *}"
 readonly LOCAL_GIT_DIR="${GIT_DIR}"
 
