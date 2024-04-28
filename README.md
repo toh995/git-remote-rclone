@@ -137,6 +137,17 @@ git checkout main
 ### Set up kopia for backups
 - If setting up for the first time, use [kopia repository create](https://kopia.io/docs/getting-started/#creating-a-repository)
 - Otherwise, use [kopia repository connect](https://kopia.io/docs/getting-started/#connecting-to-repository)
+- Set up the [kopia policy](https://kopia.io/docs/getting-started/#policies). Here are my default values:
+```
+Retention:
+  Annual snapshots:                     0   (defined for this target)
+  Monthly snapshots:                    0   (defined for this target)
+  Weekly snapshots:                     0   (defined for this target)
+  Daily snapshots:                     90   (defined for this target)
+  Hourly snapshots:                     0   (defined for this target)
+  Latest snapshots:                   200   (defined for this target)
+  Ignore identical snapshots:        true   (defined for this target)
+```
 
 ## Usage
 Use `git fetch` and `git push` as normal.
