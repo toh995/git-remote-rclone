@@ -15,7 +15,7 @@ readonly DECRYPTED_REMOTE_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/git-remote-rclone
 readonly LOCAL_GIT_DIR="${GIT_DIR}"
 
 # pull from remote rclone
-rclone sync --fast-list "${RCLONE_REMOTE}" "${DECRYPTED_REMOTE_DIR}"
+rclone sync --fast-list --update --use-server-modtime "${RCLONE_REMOTE}" "${DECRYPTED_REMOTE_DIR}"
 
 while read -r line; do
 	case $line in
@@ -49,7 +49,7 @@ while read -r line; do
 		for refspec in "${refspecs[@]}"; do
 			GIT_DIR=$LOCAL_GIT_DIR git push "${DECRYPTED_REMOTE_DIR}" "${refspec}"
 		done
-		rclone sync --fast-list "${DECRYPTED_REMOTE_DIR}" "${RCLONE_REMOTE}"
+		rclone sync --fast-list --update --use-server-modtime "${DECRYPTED_REMOTE_DIR}" "${RCLONE_REMOTE}"
 		kopia snapshot create "${DECRYPTED_REMOTE_DIR}"
 		for refspec in "${refspecs[@]}"; do
 			dst="${refspec##*:}"
